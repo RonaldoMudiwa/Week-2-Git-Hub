@@ -131,6 +131,22 @@ class Account(ABC):
         """
         return self._debit(TransactionType.WITHDRAWAL, amount, description)
 
+    def send_transfer(self, amount: Decimal | int | str, to_account: str,
+                      description: str | None = None) -> Transaction:
+        """Take money out as a transfer to another account.
+
+        Follows the same rules as withdraw(), so a savings account's monthly
+        limit counts transfers too. The Bank calls this, not users directly.
+        """
+        return self._debit(TransactionType.TRANSFER_OUT, amount,
+                           description or f"Transfer to {to_account}")
+
+    def receive_transfer(self, amount: Decimal | int | str, from_account: str,
+                         description: str | None = None) -> Transaction:
+        """Pay money in as a transfer from another account."""
+        return self._credit(TransactionType.TRANSFER_IN, amount,
+                            description or f"Transfer from {from_account}")
+
     def _credit(self, kind: TransactionType, amount: Decimal | int | str,
                 description: str) -> Transaction:
         """Add money. Every kind of money in goes through here."""

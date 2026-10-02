@@ -8,8 +8,8 @@ week adds the five SOLID principles on top, and shows where each one is used.
 
 ## Status
 
-Day 1 of 7. Current and savings accounts with deposits, withdrawals, an
-overdraft, a monthly withdrawal limit and a full history.
+Day 2 of 7. Current and savings accounts, customers, and a `Bank` that opens
+accounts and moves money between them safely.
 
 ## Getting started
 
@@ -25,7 +25,27 @@ pytest                           # run the tests
 Needs Python 3.10 or newer. Always run it with `python -m banking`, not by
 opening a file directly, because the files import each other as a package.
 
-## Using the accounts
+## Using the bank
+
+```python
+from banking import Bank
+
+bank = Bank("Mudiwa Bank")
+ronaldo = bank.add_customer("Ronaldo Mudiwa", "ronaldo@example.com")
+
+current = bank.open_account(ronaldo.customer_id, "current", "250", overdraft_limit="200")
+savings = bank.open_account(ronaldo.customer_id, "savings", "1000", interest_rate="4.5")
+
+bank.transfer(current.account_number, savings.account_number, "100", "Monthly saving")
+bank.accounts_for(ronaldo.customer_id)   # [current, savings]
+bank.total_deposits                      # Decimal('1250.00')
+```
+
+A transfer either fully happens or doesn't happen at all. The receiving
+account is checked before any money leaves, and if delivery still fails, the
+money goes straight back with a "Transfer reversed" line in the history.
+
+## Using an account on its own
 
 ```python
 from banking import CurrentAccount, SavingsAccount, WithdrawalError
@@ -49,6 +69,9 @@ for line in current.transactions:
 
 ```
 banking/
+├── bank.py              Customers, accounts and transfers
+├── customer.py          A customer's details
+├── account_numbers.py   Where new account numbers come from
 ├── account.py           Abstract base class for every account
 ├── current_account.py   Everyday account with an overdraft
 ├── savings_account.py   No overdraft, interest rate, monthly withdrawal limit
@@ -77,15 +100,19 @@ checks a withdrawal asks the same question of both and never checks the type.
 ### SOLID so far
 
 - **Single responsibility.** `Transaction` only records, `money.py` only
-  handles amounts, and accounts don't print anything.
-- **Open/closed.** A new account type is a new subclass. `Account` doesn't
-  change.
+  handles amounts, and accounts don't print anything. `Customer` only holds
+  a person's details. Which accounts they own is the `Bank`'s job.
+- **Open/closed.** A new account type is a new subclass, added with
+  `bank.register_account_type(StudentAccount)`. Neither `Account` nor `Bank`
+  needs editing. A test does exactly this to prove it.
 - **Liskov substitution.** Every account type must pass the same set of rules
   in `tests/test_account_rules.py`. Each type may refuse a withdrawal for its
   own reason, but always raises `WithdrawalError` or one of its children, so
   code using any account only catches one error.
-- **Dependency inversion.** Accounts don't read the computer's clock
-  themselves. They're given a `clock` function, so tests can set the date.
+- **Dependency inversion.** The `Bank` relies on `AccountNumberGenerator`, an
+  abstract class, not on one way of making numbers. Accounts don't read the
+  computer's clock themselves either. They're given a `clock` function, so
+  tests can set the date.
 
 ### Other decisions
 
@@ -94,11 +121,15 @@ checks a withdrawal asks the same question of both and never checks the type.
   edited after it's written.
 - **A failed withdrawal changes nothing.** Every check runs before the balance
   moves, so the account is never left half updated.
+- **Closed accounts stay on record.** Closing an account doesn't delete it,
+  so its history is still there, like a real bank.
+- **Emails are matched in any case.** `Ronaldo@Mail.com` and
+  `ronaldo@mail.com` count as the same customer.
 
 ## Tests
 
 ```bash
-pytest          # 121 tests
+pytest          # 191 tests
 ```
 
 ## Week plan

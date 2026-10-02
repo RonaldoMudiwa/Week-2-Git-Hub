@@ -6,8 +6,12 @@ Everything inherits from BankError, so one except clause catches the lot.
     |-- ValidationError
     |-- AccountNotActiveError
     |-- WithdrawalError
-        |-- InsufficientFundsError
-        |-- WithdrawalLimitError
+    |   |-- InsufficientFundsError
+    |   |-- WithdrawalLimitError
+    |-- NotFoundError
+    |   |-- CustomerNotFoundError
+    |   |-- AccountNotFoundError
+    |-- DuplicateCustomerError
 """
 
 from __future__ import annotations
@@ -40,3 +44,19 @@ class InsufficientFundsError(WithdrawalError):
 
 class WithdrawalLimitError(WithdrawalError):
     """Too many withdrawals this month for this kind of account."""
+
+
+class NotFoundError(BankError):
+    """Something asked for by id or number doesn't exist."""
+
+
+class CustomerNotFoundError(NotFoundError):
+    """No customer has that id."""
+
+
+class AccountNotFoundError(NotFoundError):
+    """No account has that number."""
+
+
+class DuplicateCustomerError(BankError):
+    """A customer with that email address already exists."""

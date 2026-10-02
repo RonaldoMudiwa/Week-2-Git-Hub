@@ -82,7 +82,8 @@ class SavingsAccount(Account):
         """Add the monthly limit on top of the normal money check."""
         if kind is not TransactionType.FEE and \
                 self.withdrawals_this_month >= self._max_withdrawals:
+            plural = "" if self._max_withdrawals == 1 else "s"
             raise WithdrawalLimitError(
-                f"Only {self._max_withdrawals} withdrawals are allowed each month."
+                f"Only {self._max_withdrawals} withdrawal{plural} allowed each month."
             )
         super()._check_withdrawal(amount, kind)
