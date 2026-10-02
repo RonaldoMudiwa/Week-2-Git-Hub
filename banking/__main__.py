@@ -11,6 +11,7 @@ from .account import Account
 from .bank import Bank
 from .exceptions import BankError
 from .money import format_money
+from .policies import FlatMonthlyFee, OverdraftFee, TieredInterest
 
 
 def show_statement(account: Account) -> None:
@@ -27,15 +28,25 @@ def main() -> None:
     ronaldo = bank.add_customer("Ronaldo Mudiwa", "ronaldo@example.com")
     amara = bank.add_customer("Amara Okafor", "amara@example.com")
 
-    current = bank.open_account(ronaldo.customer_id, "current", "250", overdraft_limit="200")
+    current = bank.open_account(ronaldo.customer_id, "current", "250", overdraft_limit="200",
+                                fee_policy=FlatMonthlyFee("3"))
     savings = bank.open_account(ronaldo.customer_id, "savings", "1000",
                                 interest_rate="4.5", max_withdrawals_per_month=1)
-    amara_current = bank.open_account(amara.customer_id, "current", "40")
+    amara_current = bank.open_account(amara.customer_id, "current", "40", overdraft_limit="100",
+                                      fee_policy=OverdraftFee("24", minimum="2"))
+    bank.open_account(amara.customer_id, "savings", "6000",
+                      interest_policy=TieredInterest([("1000", "2"), (None, "5")]))
 
     current.deposit("1850", "Wages")
     bank.transfer(current.account_number, savings.account_number, "300", "Monthly saving")
     bank.transfer(current.account_number, amara_current.account_number, "25", "Pizza money")
     bank.transfer(savings.account_number, current.account_number, "100")
+    amara_current.withdraw("90", "Phone repair")  # puts Amara into her overdraft
+
+    # Each account follows its own rules: Ronaldo's current account pays a
+    # flat fee, Amara is charged for her overdraft, and the two savings
+    # accounts earn interest in different ways.
+    bank.run_month_end()
 
     for customer in bank.customers:
         print(f"\n=== {customer} ===")

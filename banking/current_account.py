@@ -7,6 +7,7 @@ from decimal import Decimal
 from .account import Account, Clock
 from .exceptions import ValidationError
 from .money import ZERO, format_money, to_money
+from .policies import FeePolicy, InterestPolicy
 
 
 class CurrentAccount(Account):
@@ -28,11 +29,15 @@ class CurrentAccount(Account):
         opening_balance: Decimal | int | str = "0",
         overdraft_limit: Decimal | int | str = "0",
         clock: Clock | None = None,
+        *,
+        interest_policy: InterestPolicy | None = None,
+        fee_policy: FeePolicy | None = None,
     ) -> None:
         # Set before super(), because the parent may make the opening
         # deposit, and anything that reads the overdraft must find it there.
         self._overdraft_limit = ZERO
-        super().__init__(account_number, owner_name, opening_balance, clock)
+        super().__init__(account_number, owner_name, opening_balance, clock,
+                         interest_policy=interest_policy, fee_policy=fee_policy)
         self.overdraft_limit = overdraft_limit
 
     @property

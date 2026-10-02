@@ -14,6 +14,7 @@ from .exceptions import (
     ValidationError,
 )
 from .money import ZERO, format_money, positive_amount, to_money
+from .policies import FeePolicy, InterestPolicy, NoFee, NoInterest
 from .transaction import Transaction
 
 # A function that returns the current time. Passed in so tests can pretend
@@ -41,6 +42,9 @@ class Account(ABC):
         owner_name: str,
         opening_balance: Decimal | int | str = "0",
         clock: Clock | None = None,
+        *,
+        interest_policy: InterestPolicy | None = None,
+        fee_policy: FeePolicy | None = None,
     ) -> None:
         """
         Args:
@@ -48,6 +52,8 @@ class Account(ABC):
             owner_name: Name of the account holder.
             opening_balance: Money paid in when the account opens.
             clock: Returns the current time. Defaults to the real time.
+            interest_policy: How monthly interest is worked out. Default: none.
+            fee_policy: What is charged each month. Default: nothing.
 
         Raises:
             ValidationError: If any value is not allowed.
@@ -58,6 +64,9 @@ class Account(ABC):
         self._status = AccountStatus.OPEN
         self._balance = ZERO
         self._transactions: list[Transaction] = []
+        self.interest_policy = interest_policy or NoInterest()
+        self.fee_policy = fee_policy or NoFee()
+        self._last_month_end: tuple[int, int] | None = None  # (year, month)
 
         opening = to_money(opening_balance)
         if opening < ZERO:
@@ -96,6 +105,26 @@ class Account(ABC):
         A tuple, so the caller gets a copy they can't add to or delete from.
         """
         return tuple(self._transactions)
+
+    @property
+    def interest_policy(self) -> InterestPolicy:
+        return self._interest_policy
+
+    @interest_policy.setter
+    def interest_policy(self, policy: InterestPolicy) -> None:
+        if not isinstance(policy, InterestPolicy):
+            raise ValidationError("interest_policy must be an InterestPolicy.")
+        self._interest_policy = policy
+
+    @property
+    def fee_policy(self) -> FeePolicy:
+        return self._fee_policy
+
+    @fee_policy.setter
+    def fee_policy(self, policy: FeePolicy) -> None:
+        if not isinstance(policy, FeePolicy):
+            raise ValidationError("fee_policy must be a FeePolicy.")
+        self._fee_policy = policy
 
     # ------------------------------------------------------------------
     # What subclasses must provide
@@ -187,6 +216,53 @@ class Account(ABC):
         self._balance = new_balance
         self._transactions.append(transaction)
         return transaction
+
+    # ------------------------------------------------------------------
+    # Month end
+    # ------------------------------------------------------------------
+
+    @property
+    def month_end_done(self) -> bool:
+        """True if this month's interest and fees have already been applied."""
+        now = self._clock()
+        return self._last_month_end == (now.year, now.month)
+
+    def apply_month_end(self) -> list[Transaction]:
+        """Pay this month's interest, then take this month's fees.
+
+        The account's own policies decide the amounts, so this method works
+        the same for every kind of account. Frozen accounts still get
+        interest and fees, like a real bank. Closed accounts are skipped.
+
+        Returns:
+            The history lines added. Empty if there was nothing to do.
+
+        Raises:
+            ValidationError: If it has already been run this month.
+        """
+        if self._status is AccountStatus.CLOSED:
+            return []
+        if self.month_end_done:
+            raise ValidationError(
+                f"Month end has already been run on {self._account_number} this month."
+            )
+
+        added = []
+        interest = self._interest_policy.monthly_interest(self._balance)
+        if interest > ZERO:
+            added.append(self._record(TransactionType.INTEREST, interest,
+                                      self._balance + interest, "Monthly interest"))
+
+        # Fees skip the usual withdrawal checks on purpose. A bank charge is
+        # taken even if it pushes the account past its overdraft.
+        fee = self._fee_policy.monthly_fee(self._balance)
+        if fee > ZERO:
+            added.append(self._record(TransactionType.FEE, fee,
+                                      self._balance - fee, "Monthly fee"))
+
+        now = self._clock()
+        self._last_month_end = (now.year, now.month)
+        return added
 
     # ------------------------------------------------------------------
     # Status

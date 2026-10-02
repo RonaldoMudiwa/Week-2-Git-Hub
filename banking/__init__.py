@@ -25,10 +25,21 @@ from .exceptions import (
     WithdrawalLimitError,
 )
 from .money import format_money, to_money
+from .policies import (
+    CombinedFees,
+    FeePolicy,
+    FlatMonthlyFee,
+    FlatRateInterest,
+    InterestPolicy,
+    NoFee,
+    NoInterest,
+    OverdraftFee,
+    TieredInterest,
+)
 from .savings_account import SavingsAccount
 from .transaction import Transaction
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     # Bank
@@ -41,6 +52,16 @@ __all__ = [
     "CurrentAccount",
     "SavingsAccount",
     "Transaction",
+    # Interest and fee rules
+    "InterestPolicy",
+    "NoInterest",
+    "FlatRateInterest",
+    "TieredInterest",
+    "FeePolicy",
+    "NoFee",
+    "FlatMonthlyFee",
+    "OverdraftFee",
+    "CombinedFees",
     # Choices
     "AccountStatus",
     "TransactionType",

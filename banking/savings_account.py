@@ -8,6 +8,7 @@ from .account import Account, Clock
 from .enums import TransactionType
 from .exceptions import ValidationError, WithdrawalLimitError
 from .money import ZERO, to_money
+from .policies import FeePolicy, FlatRateInterest, InterestPolicy
 
 # Interest is given as a yearly percentage, e.g. "4.5" means 4.5%.
 MAX_INTEREST_RATE = Decimal("20")
@@ -34,22 +35,40 @@ class SavingsAccount(Account):
         interest_rate: Decimal | int | str = "0",
         max_withdrawals_per_month: int = 3,
         clock: Clock | None = None,
+        *,
+        interest_policy: InterestPolicy | None = None,
+        fee_policy: FeePolicy | None = None,
     ) -> None:
-        super().__init__(account_number, owner_name, opening_balance, clock)
-        self.interest_rate = interest_rate
+        """
+        Pass interest_rate for a simple flat rate, or interest_policy for
+        anything else, such as tiered rates. Not both.
+        """
+        super().__init__(account_number, owner_name, opening_balance, clock,
+                         interest_policy=interest_policy, fee_policy=fee_policy)
+        if interest_policy is None:
+            self.interest_rate = interest_rate
+        elif to_money(interest_rate) != ZERO:
+            raise ValidationError("Give either interest_rate or interest_policy, not both.")
         self.max_withdrawals_per_month = max_withdrawals_per_month
 
     @property
-    def interest_rate(self) -> Decimal:
-        """Yearly interest as a percentage, e.g. Decimal("4.50")."""
-        return self._interest_rate
+    def interest_rate(self) -> Decimal | None:
+        """Yearly interest as a percentage, e.g. Decimal("4.50").
+
+        None if the account uses a policy without one single rate, such as
+        tiered interest.
+        """
+        if isinstance(self.interest_policy, FlatRateInterest):
+            return self.interest_policy.yearly_rate
+        return None
 
     @interest_rate.setter
     def interest_rate(self, value: Decimal | int | str) -> None:
+        """A shortcut that switches the account to a flat rate."""
         rate = to_money(value)
         if not ZERO <= rate <= MAX_INTEREST_RATE:
             raise ValidationError(f"Interest rate must be between 0 and {MAX_INTEREST_RATE}%.")
-        self._interest_rate = rate
+        self.interest_policy = FlatRateInterest(rate)
 
     @property
     def max_withdrawals_per_month(self) -> int:
@@ -80,8 +99,7 @@ class SavingsAccount(Account):
 
     def _check_withdrawal(self, amount: Decimal, kind: TransactionType) -> None:
         """Add the monthly limit on top of the normal money check."""
-        if kind is not TransactionType.FEE and \
-                self.withdrawals_this_month >= self._max_withdrawals:
+        if self.withdrawals_this_month >= self._max_withdrawals:
             plural = "" if self._max_withdrawals == 1 else "s"
             raise WithdrawalLimitError(
                 f"Only {self._max_withdrawals} withdrawal{plural} allowed each month."

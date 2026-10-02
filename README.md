@@ -8,8 +8,8 @@ week adds the five SOLID principles on top, and shows where each one is used.
 
 ## Status
 
-Day 2 of 7. Current and savings accounts, customers, and a `Bank` that opens
-accounts and moves money between them safely.
+Day 3 of 7. Current and savings accounts, customers, safe transfers, and
+monthly interest and fees that follow rules you can swap.
 
 ## Getting started
 
@@ -45,6 +45,39 @@ A transfer either fully happens or doesn't happen at all. The receiving
 account is checked before any money leaves, and if delivery still fails, the
 money goes straight back with a "Transfer reversed" line in the history.
 
+## Interest and fees
+
+Each account carries two small rule objects: one for interest and one for
+fees. Swap a rule and the account follows the new one, with no change to the
+account's code.
+
+```python
+from banking import FlatMonthlyFee, OverdraftFee, TieredInterest, CombinedFees
+
+current = bank.open_account(ronaldo.customer_id, "current", "0", overdraft_limit="500",
+                            fee_policy=CombinedFees(FlatMonthlyFee("3"), OverdraftFee("24")))
+
+savings = bank.open_account(ronaldo.customer_id, "savings", "6000",
+                            interest_policy=TieredInterest([("1000", "2"), (None, "5")]))
+
+bank.run_month_end()   # every account applies its own rules
+```
+
+| Rule | What it does |
+| --- | --- |
+| `NoInterest()` | Pays nothing. Default for a current account |
+| `FlatRateInterest("4.5")` | One yearly rate on the whole balance. `interest_rate="4.5"` on a savings account is a shortcut for this |
+| `TieredInterest(bands)` | Different rates for different slices of the balance, like tax bands |
+| `NoFee()` | Charges nothing. Default for every account |
+| `FlatMonthlyFee("3")` | The same charge every month |
+| `OverdraftFee("24", minimum="2")` | A yearly rate on what's borrowed, only when overdrawn |
+| `CombinedFees(a, b)` | Several fee rules added together |
+
+Interest is paid before fees. Month end only runs once per account per month,
+so pressing the button twice by mistake does nothing. Fees are taken even if
+they push an account past its overdraft, like a real bank. Closed accounts are
+skipped.
+
 ## Using an account on its own
 
 ```python
@@ -73,6 +106,7 @@ banking/
 ├── customer.py          A customer's details
 ├── account_numbers.py   Where new account numbers come from
 ├── account.py           Abstract base class for every account
+├── policies.py          Interest and fee rules
 ├── current_account.py   Everyday account with an overdraft
 ├── savings_account.py   No overdraft, interest rate, monthly withdrawal limit
 ├── transaction.py       One line of history, can't be changed once made
@@ -97,20 +131,25 @@ short because of it.
 current account and "just the balance" on a savings account. The code that
 checks a withdrawal asks the same question of both and never checks the type.
 
-### SOLID so far
+### SOLID
 
 - **Single responsibility.** `Transaction` only records, `money.py` only
   handles amounts, and accounts don't print anything. `Customer` only holds
   a person's details. Which accounts they own is the `Bank`'s job.
 - **Open/closed.** A new account type is a new subclass, added with
-  `bank.register_account_type(StudentAccount)`. Neither `Account` nor `Bank`
-  needs editing. A test does exactly this to prove it.
+  `bank.register_account_type(StudentAccount)`. A new interest or fee rule is
+  a new class too. Neither `Account` nor `Bank` needs editing. Tests do both
+  to prove it.
 - **Liskov substitution.** Every account type must pass the same set of rules
   in `tests/test_account_rules.py`. Each type may refuse a withdrawal for its
   own reason, but always raises `WithdrawalError` or one of its children, so
   code using any account only catches one error.
+- **Interface segregation.** Interest rules and fee rules are two separate,
+  tiny interfaces, each with one method. A fee rule never has to pretend to
+  know about interest, and the other way round.
 - **Dependency inversion.** The `Bank` relies on `AccountNumberGenerator`, an
-  abstract class, not on one way of making numbers. Accounts don't read the
+  abstract class, not on one way of making numbers. Accounts rely on
+  `InterestPolicy` and `FeePolicy`, not on any particular rule. Accounts don't read the
   computer's clock themselves either. They're given a `clock` function, so
   tests can set the date.
 
@@ -123,13 +162,16 @@ checks a withdrawal asks the same question of both and never checks the type.
   moves, so the account is never left half updated.
 - **Closed accounts stay on record.** Closing an account doesn't delete it,
   so its history is still there, like a real bank.
+- **Rules are objects, not if statements.** Without them, `Account` would
+  need a growing chain of "if it's this kind of account, charge this". This is
+  called the Strategy pattern.
 - **Emails are matched in any case.** `Ronaldo@Mail.com` and
   `ronaldo@mail.com` count as the same customer.
 
 ## Tests
 
 ```bash
-pytest          # 191 tests
+pytest          # 251 tests
 ```
 
 ## Week plan

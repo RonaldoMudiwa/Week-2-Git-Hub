@@ -218,6 +218,30 @@ class Bank:
         return money_out, money_in
 
     # ------------------------------------------------------------------
+    # Month end
+    # ------------------------------------------------------------------
+
+    def run_month_end(self) -> dict[str, list[Transaction]]:
+        """Pay interest and take fees on every account.
+
+        The Bank doesn't know how any account works these out. It just asks
+        each one to apply its own rules. Accounts that are closed or have
+        already been done this month are skipped, so running it twice by
+        mistake does no harm.
+
+        Returns:
+            Each account number that changed, with the lines added to it.
+        """
+        changes: dict[str, list[Transaction]] = {}
+        for account in self._accounts.values():
+            if account.month_end_done:
+                continue
+            added = account.apply_month_end()
+            if added:
+                changes[account.account_number] = added
+        return changes
+
+    # ------------------------------------------------------------------
     # Totals and container behaviour
     # ------------------------------------------------------------------
 
