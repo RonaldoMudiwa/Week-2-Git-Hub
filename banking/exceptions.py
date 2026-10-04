@@ -12,6 +12,7 @@ Everything inherits from BankError, so one except clause catches the lot.
     |   |-- CustomerNotFoundError
     |   |-- AccountNotFoundError
     |-- DuplicateCustomerError
+    |-- StorageError
 """
 
 from __future__ import annotations
@@ -60,3 +61,7 @@ class AccountNotFoundError(NotFoundError):
 
 class DuplicateCustomerError(BankError):
     """A customer with that email address already exists."""
+
+
+class StorageError(BankError):
+    """Saving or loading failed, e.g. the file is damaged or can't be written."""

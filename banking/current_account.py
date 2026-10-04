@@ -58,6 +58,9 @@ class CurrentAccount(Account):
             )
         self._overdraft_limit = limit
 
+    def settings(self) -> dict:
+        return {"overdraft_limit": str(self._overdraft_limit)}
+
     @property
     def available_to_withdraw(self) -> Decimal:
         """The balance plus whatever overdraft is left."""

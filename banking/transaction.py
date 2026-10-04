@@ -6,9 +6,11 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from .enums import TransactionType
-from .money import format_money
+from .exceptions import ValidationError
+from .money import format_money, to_money
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,38 @@ class Transaction:
     description: str
     timestamp: datetime
     transaction_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+
+    def to_dict(self) -> dict[str, Any]:
+        """A plain dictionary that can be saved as JSON."""
+        return {
+            "transaction_id": self.transaction_id,
+            "kind": self.kind.value,
+            "amount": str(self.amount),  # text keeps the pennies exact
+            "balance_after": str(self.balance_after),
+            "description": self.description,
+            "timestamp": self.timestamp.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Transaction":
+        """Rebuild a transaction from what to_dict made.
+
+        Raises:
+            ValidationError: If a value is missing or not valid.
+        """
+        try:
+            return cls(
+                kind=TransactionType(data["kind"]),
+                amount=to_money(data["amount"]),
+                balance_after=to_money(data["balance_after"]),
+                description=data["description"],
+                timestamp=datetime.fromisoformat(data["timestamp"]),
+                transaction_id=data["transaction_id"],
+            )
+        except KeyError as error:
+            raise ValidationError(f"Transaction is missing {error}.") from error
+        except (ValueError, TypeError) as error:
+            raise ValidationError(f"Transaction has a bad value: {error}") from error
 
     @property
     def signed_amount(self) -> Decimal:

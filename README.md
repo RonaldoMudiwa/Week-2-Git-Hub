@@ -8,8 +8,8 @@ week adds the five SOLID principles on top, and shows where each one is used.
 
 ## Status
 
-Day 3 of 7. Current and savings accounts, customers, safe transfers, and
-monthly interest and fees that follow rules you can swap.
+Day 4 of 7. Current and savings accounts, customers, safe transfers, monthly
+interest and fees, and saving the whole bank to a file.
 
 ## Getting started
 
@@ -78,6 +78,32 @@ so pressing the button twice by mistake does nothing. Fees are taken even if
 they push an account past its overdraft, like a real bank. Closed accounts are
 skipped.
 
+## Saving and loading
+
+```python
+from banking import JSONBankRepository
+
+repository = JSONBankRepository("data/bank.json")
+repository.save(bank)          # writes everything
+bank = repository.load()       # None if nothing has been saved yet
+```
+
+Everything comes back exactly as it was: customers, accounts, every history
+line, each account's interest and fee rules, frozen or closed accounts, and
+which accounts have already had this month's interest. New account numbers
+and customer ids carry on from where they left off.
+
+The balance itself isn't saved. It's worked out again from the history when
+loading, and every line is checked as it goes. So if someone edits a number in
+the file, loading stops with a `StorageError` instead of quietly creating
+money. Saving writes to a temporary file first and swaps it in, so a crash
+half way through never leaves a broken file.
+
+Each piece saves itself with `to_dict()` and loads with `from_dict()`. The
+storage code never needs to know what's inside an account or a rule. A new
+interest or fee rule only needs `@register_policy("name")` above it to be
+saved and loaded.
+
 ## Using an account on its own
 
 ```python
@@ -107,6 +133,7 @@ banking/
 ├── account_numbers.py   Where new account numbers come from
 ├── account.py           Abstract base class for every account
 ├── policies.py          Interest and fee rules
+├── storage.py           Saving and loading the bank
 ├── current_account.py   Everyday account with an overdraft
 ├── savings_account.py   No overdraft, interest rate, monthly withdrawal limit
 ├── transaction.py       One line of history, can't be changed once made
@@ -149,9 +176,10 @@ checks a withdrawal asks the same question of both and never checks the type.
   know about interest, and the other way round.
 - **Dependency inversion.** The `Bank` relies on `AccountNumberGenerator`, an
   abstract class, not on one way of making numbers. Accounts rely on
-  `InterestPolicy` and `FeePolicy`, not on any particular rule. Accounts don't read the
-  computer's clock themselves either. They're given a `clock` function, so
-  tests can set the date.
+  `InterestPolicy` and `FeePolicy`, not on any particular rule. Code that saves
+  the bank relies on `BankRepository`, so a database could replace the JSON
+  file. Accounts don't read the computer's clock either. They're given a
+  `clock` function, so tests can set the date.
 
 ### Other decisions
 
@@ -171,7 +199,7 @@ checks a withdrawal asks the same question of both and never checks the type.
 ## Tests
 
 ```bash
-pytest          # 251 tests
+pytest          # 290 tests
 ```
 
 ## Week plan

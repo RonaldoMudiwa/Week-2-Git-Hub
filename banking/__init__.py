@@ -20,6 +20,7 @@ from .exceptions import (
     DuplicateCustomerError,
     InsufficientFundsError,
     NotFoundError,
+    StorageError,
     ValidationError,
     WithdrawalError,
     WithdrawalLimitError,
@@ -37,9 +38,10 @@ from .policies import (
     TieredInterest,
 )
 from .savings_account import SavingsAccount
+from .storage import BankRepository, InMemoryBankRepository, JSONBankRepository
 from .transaction import Transaction
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     # Bank
@@ -62,6 +64,10 @@ __all__ = [
     "FlatMonthlyFee",
     "OverdraftFee",
     "CombinedFees",
+    # Saving and loading
+    "BankRepository",
+    "JSONBankRepository",
+    "InMemoryBankRepository",
     # Choices
     "AccountStatus",
     "TransactionType",
@@ -79,5 +85,6 @@ __all__ = [
     "CustomerNotFoundError",
     "AccountNotFoundError",
     "DuplicateCustomerError",
+    "StorageError",
     "__version__",
 ]

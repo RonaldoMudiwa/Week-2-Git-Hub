@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import datetime
 from decimal import Decimal
-from typing import Callable
+from typing import Any, Callable
 
 from .enums import AccountStatus, TransactionType
 from .exceptions import (
@@ -14,7 +14,7 @@ from .exceptions import (
     ValidationError,
 )
 from .money import ZERO, format_money, positive_amount, to_money
-from .policies import FeePolicy, InterestPolicy, NoFee, NoInterest
+from .policies import FeePolicy, InterestPolicy, NoFee, NoInterest, policy_from_dict
 from .transaction import Transaction
 
 # A function that returns the current time. Passed in so tests can pretend
@@ -299,6 +299,80 @@ class Account(ABC):
             raise AccountNotActiveError(
                 f"Account {self._account_number} is {self._status.value}."
             )
+
+    # ------------------------------------------------------------------
+    # Saving and loading
+    # ------------------------------------------------------------------
+
+    def settings(self) -> dict[str, Any]:
+        """Extra values a subclass needs to be rebuilt, e.g. its overdraft limit."""
+        return {}
+
+    def to_dict(self) -> dict[str, Any]:
+        """Everything about the account as a plain dictionary for JSON."""
+        return {
+            "type": self.ACCOUNT_TYPE,
+            "account_number": self._account_number,
+            "owner_name": self._owner_name,
+            "status": self._status.value,
+            "last_month_end": list(self._last_month_end) if self._last_month_end else None,
+            "settings": self.settings(),
+            "interest_policy": self._interest_policy.to_dict(),
+            "fee_policy": self._fee_policy.to_dict(),
+            "transactions": [t.to_dict() for t in self._transactions],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any], clock: Clock | None = None) -> "Account":
+        """Rebuild an account, history and all, from what to_dict made.
+
+        Works for every subclass, because each one is built through its own
+        constructor using its own settings().
+
+        Raises:
+            ValidationError: If anything is missing, not valid, or the
+                history doesn't add up.
+        """
+        try:
+            account = cls(
+                data["account_number"],
+                data["owner_name"],
+                clock=clock,
+                interest_policy=policy_from_dict(data["interest_policy"]),
+                fee_policy=policy_from_dict(data["fee_policy"]),
+                **data.get("settings", {}),
+            )
+            history = [Transaction.from_dict(item) for item in data.get("transactions", [])]
+            status = AccountStatus(data.get("status", "open"))
+            last = data.get("last_month_end")
+            last_month_end = (int(last[0]), int(last[1])) if last else None
+        except KeyError as error:
+            raise ValidationError(f"Account is missing {error}.") from error
+        except (TypeError, ValueError) as error:
+            raise ValidationError(f"Account has a bad value: {error}") from error
+
+        account._restore(history, status, last_month_end)
+        return account
+
+    def _restore(self, history: list[Transaction], status: AccountStatus,
+                 last_month_end: tuple[int, int] | None) -> None:
+        """Put back saved history, checking every line adds up first.
+
+        The balance isn't saved separately. It is worked out from the
+        history, so the two can never disagree.
+        """
+        running = ZERO
+        for line in history:
+            running += line.signed_amount
+            if line.balance_after != running:
+                raise ValidationError(
+                    f"History for {self._account_number} doesn't add up at "
+                    f"{line.transaction_id}: expected {running}, found {line.balance_after}."
+                )
+        self._transactions = list(history)
+        self._balance = running
+        self._status = status
+        self._last_month_end = last_month_end
 
     # ------------------------------------------------------------------
     # Helpers

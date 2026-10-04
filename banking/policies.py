@@ -12,12 +12,70 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Any, Callable, TypeVar
 
 from .exceptions import ValidationError
 from .money import PENNY, ZERO, to_money
 
 MONTHS_IN_YEAR = 12
 MAX_RATE = Decimal("100")
+
+# Saved name -> rule class, used to rebuild rules when loading.
+_POLICY_TYPES: dict[str, type] = {}
+_PolicyT = TypeVar("_PolicyT", bound=type)
+
+
+def register_policy(name: str) -> Callable[[_PolicyT], _PolicyT]:
+    """Mark a rule class so it can be saved and loaded under this name.
+
+    Used as @register_policy("flat_rate") above a class. Adding a new rule
+    needs only this one line, not a change to the loading code.
+    """
+    def decorate(policy_class: _PolicyT) -> _PolicyT:
+        if name in _POLICY_TYPES:
+            raise ValueError(f"Policy name {name!r} is already used.")
+        policy_class.POLICY_TYPE = name
+        _POLICY_TYPES[name] = policy_class
+        return policy_class
+    return decorate
+
+
+def policy_from_dict(data: dict[str, Any]) -> "InterestPolicy | FeePolicy":
+    """Rebuild any saved rule from what its to_dict made.
+
+    Raises:
+        ValidationError: If the type is unknown or a setting is bad.
+    """
+    if not isinstance(data, dict) or "type" not in data:
+        raise ValidationError("A saved rule needs a 'type'.")
+    policy_class = _POLICY_TYPES.get(data["type"])
+    if policy_class is None:
+        raise ValidationError(f"Unknown rule type {data['type']!r}.")
+    return policy_class.from_settings(data.get("settings", {}))
+
+
+class _SavablePolicy:
+    """Saving and loading shared by every rule.
+
+    Each rule lists its settings in settings() and is rebuilt by passing
+    those same settings back to its constructor.
+    """
+
+    POLICY_TYPE = ""
+
+    def settings(self) -> dict[str, Any]:
+        """The values needed to rebuild this rule. None by default."""
+        return {}
+
+    @classmethod
+    def from_settings(cls, settings: dict[str, Any]):
+        try:
+            return cls(**settings)
+        except TypeError as error:
+            raise ValidationError(f"Bad settings for {cls.__name__}: {error}") from error
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": self.POLICY_TYPE, "settings": self.settings()}
 
 
 def _rate(value: Decimal | int | str, name: str) -> Decimal:
@@ -38,7 +96,7 @@ def _monthly_share(amount: Decimal, yearly_rate: Decimal) -> Decimal:
 # ----------------------------------------------------------------------
 
 
-class InterestPolicy(ABC):
+class InterestPolicy(_SavablePolicy, ABC):
     """Works out how much interest to pay an account each month."""
 
     @abstractmethod
@@ -46,6 +104,7 @@ class InterestPolicy(ABC):
         """Interest for one month on this balance. Never negative."""
 
 
+@register_policy("no_interest")
 class NoInterest(InterestPolicy):
     """Pays nothing. The default for a current account."""
 
@@ -56,6 +115,7 @@ class NoInterest(InterestPolicy):
         return "NoInterest()"
 
 
+@register_policy("flat_rate_interest")
 class FlatRateInterest(InterestPolicy):
     """The same yearly rate on the whole balance.
 
@@ -70,6 +130,9 @@ class FlatRateInterest(InterestPolicy):
     def yearly_rate(self) -> Decimal:
         return self._rate
 
+    def settings(self) -> dict[str, Any]:
+        return {"yearly_rate": str(self._rate)}
+
     def monthly_interest(self, balance: Decimal) -> Decimal:
         # No interest on money that isn't there.
         if balance <= ZERO:
@@ -80,6 +143,7 @@ class FlatRateInterest(InterestPolicy):
         return f"FlatRateInterest({str(self._rate)!r})"
 
 
+@register_policy("tiered_interest")
 class TieredInterest(InterestPolicy):
     """Different rates for different slices of the balance.
 
@@ -110,6 +174,11 @@ class TieredInterest(InterestPolicy):
                 previous_top = limit
             self._bands.append((limit, _rate(rate, "Interest rate")))
 
+    def settings(self) -> dict[str, Any]:
+        # JSON has no tuples, so each band is saved as a [top, rate] list.
+        return {"bands": [[None if top is None else str(top), str(rate)]
+                          for top, rate in self._bands]}
+
     def monthly_interest(self, balance: Decimal) -> Decimal:
         if balance <= ZERO:
             return ZERO
@@ -137,7 +206,7 @@ class TieredInterest(InterestPolicy):
 # ----------------------------------------------------------------------
 
 
-class FeePolicy(ABC):
+class FeePolicy(_SavablePolicy, ABC):
     """Works out what to charge an account each month."""
 
     @abstractmethod
@@ -145,6 +214,7 @@ class FeePolicy(ABC):
         """The fee for one month at this balance. Never negative."""
 
 
+@register_policy("no_fee")
 class NoFee(FeePolicy):
     """Charges nothing. The default for every account."""
 
@@ -155,6 +225,7 @@ class NoFee(FeePolicy):
         return "NoFee()"
 
 
+@register_policy("flat_monthly_fee")
 class FlatMonthlyFee(FeePolicy):
     """The same charge every month, e.g. £3 for a packaged account."""
 
@@ -164,6 +235,9 @@ class FlatMonthlyFee(FeePolicy):
             raise ValidationError("A fee can't be negative.")
         self._amount = fee
 
+    def settings(self) -> dict[str, Any]:
+        return {"amount": str(self._amount)}
+
     def monthly_fee(self, balance: Decimal) -> Decimal:
         return self._amount
 
@@ -171,6 +245,7 @@ class FlatMonthlyFee(FeePolicy):
         return f"FlatMonthlyFee({str(self._amount)!r})"
 
 
+@register_policy("overdraft_fee")
 class OverdraftFee(FeePolicy):
     """Charges interest on money borrowed through the overdraft.
 
@@ -188,6 +263,9 @@ class OverdraftFee(FeePolicy):
         if self._minimum < ZERO:
             raise ValidationError("Minimum charge can't be negative.")
 
+    def settings(self) -> dict[str, Any]:
+        return {"yearly_rate": str(self._rate), "minimum": str(self._minimum)}
+
     def monthly_fee(self, balance: Decimal) -> Decimal:
         if balance >= ZERO:
             return ZERO
@@ -197,6 +275,7 @@ class OverdraftFee(FeePolicy):
         return f"OverdraftFee({str(self._rate)!r}, minimum={str(self._minimum)!r})"
 
 
+@register_policy("combined_fees")
 class CombinedFees(FeePolicy):
     """Several fee rules added together, e.g. a flat fee plus overdraft charges.
 
@@ -208,6 +287,15 @@ class CombinedFees(FeePolicy):
         if not policies or not all(isinstance(p, FeePolicy) for p in policies):
             raise ValidationError("CombinedFees needs one or more fee policies.")
         self._policies = policies
+
+    def to_dict(self) -> dict[str, Any]:
+        # Each rule inside saves itself, so this works for any mix of rules.
+        return {"type": self.POLICY_TYPE,
+                "settings": {"policies": [p.to_dict() for p in self._policies]}}
+
+    @classmethod
+    def from_settings(cls, settings: dict[str, Any]) -> "CombinedFees":
+        return cls(*(policy_from_dict(item) for item in settings.get("policies", [])))
 
     def monthly_fee(self, balance: Decimal) -> Decimal:
         return sum((p.monthly_fee(balance) for p in self._policies), start=ZERO)

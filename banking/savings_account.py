@@ -81,6 +81,10 @@ class SavingsAccount(Account):
             raise ValidationError("Withdrawals per month must be a whole number of at least 1.")
         self._max_withdrawals = value
 
+    def settings(self) -> dict:
+        # The interest rule is saved separately, with every other account's.
+        return {"max_withdrawals_per_month": self._max_withdrawals}
+
     @property
     def available_to_withdraw(self) -> Decimal:
         """No overdraft, so it's just the balance."""

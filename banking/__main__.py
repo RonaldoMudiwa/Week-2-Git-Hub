@@ -7,11 +7,15 @@ Temporary. A proper command line interface replaces it later in the week.
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 from .account import Account
 from .bank import Bank
 from .exceptions import BankError
 from .money import format_money
 from .policies import FlatMonthlyFee, OverdraftFee, TieredInterest
+from .storage import JSONBankRepository
 
 
 def show_statement(account: Account) -> None:
@@ -55,6 +59,8 @@ def main() -> None:
 
     print(f"\nTotal held by {bank.name}: {format_money(bank.total_deposits)}")
 
+    show_saving_and_loading(bank)
+
     print("\nThings the bank refuses to do")
     print("-" * 74)
     attempts = [
@@ -72,6 +78,27 @@ def main() -> None:
             attempt()
         except BankError as error:
             print(f"{label}: {type(error).__name__}: {error}")
+
+
+def show_saving_and_loading(bank: Bank) -> None:
+    """Save the bank, load it back, and check nothing changed.
+
+    Uses a throwaway folder, so the demo never leaves files behind.
+    """
+    print("\nSaving and loading")
+    print("-" * 74)
+    with tempfile.TemporaryDirectory() as folder:
+        repository = JSONBankRepository(Path(folder) / "bank.json")
+        repository.save(bank)
+        loaded = repository.load()
+
+    same_history = all(
+        account.transactions == loaded.get_account(account.account_number).transactions
+        for account in bank
+    )
+    print(f"Saved and loaded {len(loaded)} accounts for {len(loaded.customers)} customers")
+    print(f"Same total after loading: {loaded.total_deposits == bank.total_deposits}")
+    print(f"Same history on every account: {same_history}")
 
 
 if __name__ == "__main__":

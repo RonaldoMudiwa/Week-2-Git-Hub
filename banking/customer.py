@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from .exceptions import ValidationError
 
@@ -52,6 +53,17 @@ class Customer:
         if not EMAIL_PATTERN.match(cleaned):
             raise ValidationError(f"{value!r} doesn't look like an email address.")
         self._email = cleaned
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"customer_id": self._customer_id, "name": self._name, "email": self._email}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Customer":
+        """Rebuild a customer. The usual checks run again, so bad data is caught."""
+        try:
+            return cls(data["customer_id"], data["name"], data["email"])
+        except KeyError as error:
+            raise ValidationError(f"Customer is missing {error}.") from error
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Customer):

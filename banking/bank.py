@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Iterator
+from typing import Any, Iterator
 
 from .account import Account, Clock
 from .account_numbers import AccountNumberGenerator, SequentialAccountNumberGenerator
@@ -240,6 +240,79 @@ class Bank:
             if added:
                 changes[account.account_number] = added
         return changes
+
+    # ------------------------------------------------------------------
+    # Saving and loading
+    # ------------------------------------------------------------------
+
+    def to_dict(self) -> dict[str, Any]:
+        """The whole bank as a plain dictionary for JSON.
+
+        Each account and customer saves itself, so this method doesn't need
+        to know what's inside any of them.
+        """
+        return {
+            "name": self._name,
+            "customers": [c.to_dict() for c in self._customers.values()],
+            "accounts": [
+                {"owner": self._owners[number], **account.to_dict()}
+                for number, account in self._accounts.items()
+            ],
+        }
+
+    @classmethod
+    def from_dict(
+        cls,
+        data: dict[str, Any],
+        clock: Clock | None = None,
+        extra_account_types: tuple[type[Account], ...] = (),
+    ) -> "Bank":
+        """Rebuild a bank from what to_dict made.
+
+        New account numbers carry on from the highest one saved, so a loaded
+        bank never hands out a number that's already taken.
+
+        Args:
+            data: What to_dict made.
+            clock: Returns the current time. Passed on to every account.
+            extra_account_types: Any account types registered beyond the
+                standard ones, so their accounts can be rebuilt.
+
+        Raises:
+            ValidationError: If anything is missing or doesn't make sense.
+        """
+        try:
+            name = data["name"]
+            customers = [Customer.from_dict(item) for item in data.get("customers", [])]
+            account_items = list(data.get("accounts", []))
+        except (KeyError, TypeError) as error:
+            raise ValidationError(f"Saved bank is missing or has a bad {error}.") from error
+
+        numbers = [int(item["account_number"]) for item in account_items
+                   if str(item.get("account_number", "")).isdigit()]
+        start = max(numbers) + 1 if numbers else 10000001
+        bank = cls(name, SequentialAccountNumberGenerator(start), clock)
+        for account_class in extra_account_types:
+            bank.register_account_type(account_class)
+
+        for customer in customers:
+            if customer.customer_id in bank._customers:
+                raise ValidationError(f"Customer {customer.customer_id} is saved twice.")
+            bank._customers[customer.customer_id] = customer
+
+        for item in account_items:
+            account_class = bank._account_types.get(item.get("type"))
+            if account_class is None:
+                raise ValidationError(f"Unknown account type {item.get('type')!r}.")
+            owner = item.get("owner")
+            if owner not in bank._customers:
+                raise ValidationError(f"Account {item.get('account_number')} has an unknown owner.")
+            account = account_class.from_dict(item, clock=bank._clock)
+            if account.account_number in bank._accounts:
+                raise ValidationError(f"Account {account.account_number} is saved twice.")
+            bank._accounts[account.account_number] = account
+            bank._owners[account.account_number] = owner
+        return bank
 
     # ------------------------------------------------------------------
     # Totals and container behaviour
