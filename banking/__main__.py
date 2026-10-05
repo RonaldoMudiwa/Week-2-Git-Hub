@@ -8,22 +8,16 @@ Temporary. A proper command line interface replaces it later in the week.
 from __future__ import annotations
 
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
-from .account import Account
 from .bank import Bank
 from .exceptions import BankError
 from .money import format_money
 from .policies import FlatMonthlyFee, OverdraftFee, TieredInterest
+from .reports import BankReport, TextFormatter
+from .statements import Statement
 from .storage import JSONBankRepository
-
-
-def show_statement(account: Account) -> None:
-    """Print an account and its history. Works for any kind of account."""
-    print(f"\n{account}")
-    print("-" * 74)
-    for transaction in account.transactions:
-        print(transaction.summary_line())
 
 
 def main() -> None:
@@ -52,11 +46,8 @@ def main() -> None:
     # accounts earn interest in different ways.
     bank.run_month_end()
 
-    for customer in bank.customers:
-        print(f"\n=== {customer} ===")
-        for account in bank.accounts_for(customer.customer_id):
-            show_statement(account)
-
+    show_statements(bank)
+    show_reports(bank)
     print(f"\nTotal held by {bank.name}: {format_money(bank.total_deposits)}")
 
     show_saving_and_loading(bank)
@@ -78,6 +69,31 @@ def main() -> None:
             attempt()
         except BankError as error:
             print(f"{label}: {type(error).__name__}: {error}")
+
+
+def show_statements(bank: Bank) -> None:
+    """This month's statement for every account. Works for any kind of account."""
+    formatter = TextFormatter()
+    today = datetime.now()
+    for account in bank:
+        print()
+        print(formatter.statement(Statement.for_month(account, today.year, today.month)))
+
+
+def show_reports(bank: Bank) -> None:
+    """The bank manager's view."""
+    report = BankReport(bank)
+    formatter = TextFormatter()
+    today = datetime.now()
+    sections = [
+        ("Customers", formatter.customer_table(report.customer_summaries())),
+        ("Account types", formatter.type_table(report.totals_by_account_type())),
+        ("Overdrawn accounts", formatter.overdrawn_table(report.overdrawn_accounts())),
+        ("This month", formatter.month_activity(report.month_activity(today.year, today.month))),
+    ]
+    for title, table in sections:
+        print(f"\n=== {title} ===")
+        print(table)
 
 
 def show_saving_and_loading(bank: Bank) -> None:

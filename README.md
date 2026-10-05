@@ -8,8 +8,8 @@ week adds the five SOLID principles on top, and shows where each one is used.
 
 ## Status
 
-Day 4 of 7. Current and savings accounts, customers, safe transfers, monthly
-interest and fees, and saving the whole bank to a file.
+Day 5 of 7. Current and savings accounts, customers, safe transfers, monthly
+interest and fees, saving to a file, and statements and reports.
 
 ## Getting started
 
@@ -104,6 +104,35 @@ storage code never needs to know what's inside an account or a rule. A new
 interest or fee rule only needs `@register_policy("name")` above it to be
 saved and loaded.
 
+## Statements and reports
+
+```python
+from banking import BankReport, Statement, TextFormatter
+
+formatter = TextFormatter()
+
+statement = Statement.for_month(current, 2026, 10)
+print(formatter.statement(statement))     # opening balance, every line, closing balance
+
+report = BankReport(bank)
+print(formatter.customer_table(report.customer_summaries()))
+print(formatter.overdrawn_table(report.overdrawn_accounts()))
+print(formatter.month_activity(report.month_activity(2026, 10)))
+```
+
+A `Statement` works like the paper one a bank posts you. The opening balance
+is the balance just before the first day, so each month opens exactly where
+the last one closed. It's a frozen snapshot, so later activity never changes
+an old statement.
+
+`BankReport` gives the bank manager's view: each customer's total across their
+accounts, totals by account type, overdrawn accounts (worst first), and the
+money in, money out, interest and fees for any month.
+
+`BankReport` and `Statement` only work out numbers. `TextFormatter` turns them
+into text. Keeping the two apart means the same numbers could feed a web page
+or a spreadsheet later without touching the maths.
+
 ## Using an account on its own
 
 ```python
@@ -134,6 +163,8 @@ banking/
 ├── account.py           Abstract base class for every account
 ├── policies.py          Interest and fee rules
 ├── storage.py           Saving and loading the bank
+├── statements.py        Monthly statements
+├── reports.py           Bank-wide reports and turning them into text
 ├── current_account.py   Everyday account with an overdraft
 ├── savings_account.py   No overdraft, interest rate, monthly withdrawal limit
 ├── transaction.py       One line of history, can't be changed once made
@@ -161,7 +192,8 @@ checks a withdrawal asks the same question of both and never checks the type.
 ### SOLID
 
 - **Single responsibility.** `Transaction` only records, `money.py` only
-  handles amounts, and accounts don't print anything. `Customer` only holds
+  handles amounts, and accounts don't print anything. Reports work out
+  numbers and `TextFormatter` only does the printing. `Customer` only holds
   a person's details. Which accounts they own is the `Bank`'s job.
 - **Open/closed.** A new account type is a new subclass, added with
   `bank.register_account_type(StudentAccount)`. A new interest or fee rule is
@@ -199,7 +231,7 @@ checks a withdrawal asks the same question of both and never checks the type.
 ## Tests
 
 ```bash
-pytest          # 290 tests
+pytest          # 326 tests
 ```
 
 ## Week plan

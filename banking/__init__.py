@@ -37,11 +37,13 @@ from .policies import (
     OverdraftFee,
     TieredInterest,
 )
+from .reports import BankReport, CustomerSummary, MonthActivity, TextFormatter, TypeSummary
 from .savings_account import SavingsAccount
+from .statements import Statement
 from .storage import BankRepository, InMemoryBankRepository, JSONBankRepository
 from .transaction import Transaction
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     # Bank
@@ -64,6 +66,13 @@ __all__ = [
     "FlatMonthlyFee",
     "OverdraftFee",
     "CombinedFees",
+    # Statements and reports
+    "Statement",
+    "BankReport",
+    "TextFormatter",
+    "CustomerSummary",
+    "TypeSummary",
+    "MonthActivity",
     # Saving and loading
     "BankRepository",
     "JSONBankRepository",
