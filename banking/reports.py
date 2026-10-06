@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Sequence
 
 from .account import Account
 from .bank import Bank
@@ -150,4 +151,21 @@ class TextFormatter:
         ]
         lines = [f"Activity for {activity.year}-{activity.month:02d}", "-" * 46]
         lines += [f"{label:<30}{format_money(amount):>16}" for label, amount in rows]
+        return "\n".join(lines)
+
+    def customer_list(self, customers: Sequence[Customer]) -> str:
+        if not customers:
+            return "No customers yet."
+        lines = [f"{'Id':<8}{'Name':<30}Email", "-" * 66]
+        lines += [f"{c.customer_id:<8}{c.name:<30}{c.email}" for c in customers]
+        return "\n".join(lines)
+
+    def account_list(self, accounts: Sequence[Account]) -> str:
+        if not accounts:
+            return "No accounts yet."
+        lines = [f"{'Account':<12}{'Type':<10}{'Owner':<26}{'Status':<8}{'Balance':>14}", "-" * 70]
+        for account in accounts:
+            lines.append(f"{account.account_number:<12}{account.ACCOUNT_TYPE.title():<10}"
+                         f"{account.owner_name:<26}{account.status.value:<8}"
+                         f"{format_money(account.balance):>14}")
         return "\n".join(lines)

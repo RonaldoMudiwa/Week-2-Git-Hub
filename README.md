@@ -8,8 +8,9 @@ week adds the five SOLID principles on top, and shows where each one is used.
 
 ## Status
 
-Day 5 of 7. Current and savings accounts, customers, safe transfers, monthly
-interest and fees, saving to a file, and statements and reports.
+Day 6 of 7. Current and savings accounts, customers, safe transfers, monthly
+interest and fees, saving to a file, statements and reports, and a command
+line interface.
 
 ## Getting started
 
@@ -18,14 +19,45 @@ python -m venv .venv
 .venv\Scripts\activate           # macOS or Linux: source .venv/bin/activate
 pip install -r requirements.txt  # only needed for the tests
 
-python -m banking                # run the demo
+python -m banking --help         # see every command
+python -m banking demo           # a quick tour with made up customers
 pytest                           # run the tests
 ```
 
 Needs Python 3.10 or newer. Always run it with `python -m banking`, not by
 opening a file directly, because the files import each other as a package.
 
-## Using the bank
+## Using it from the terminal
+
+Each command loads the bank from `data/bank.json`, does one job, and saves it
+again. The file is made the first time you add something.
+
+```bash
+python -m banking add-customer "Ronaldo Mudiwa" ronaldo@example.com
+python -m banking open C0001 current --deposit 250 --overdraft 200 --monthly-fee 3
+python -m banking open C0001 savings --deposit 1000 --rate 4.5 --max-withdrawals 1
+
+python -m banking deposit 10000001 1850 --note Wages
+python -m banking transfer 10000001 10000002 300 --note "Monthly saving"
+python -m banking withdraw 10000001 40
+
+python -m banking accounts               # every account, or add C0001 for one customer
+python -m banking statement 10000001     # this month, or --month 2026-09
+python -m banking month-end              # pay interest and take fees
+python -m banking report                 # the bank manager's view
+
+python -m banking freeze 10000001        # also unfreeze and close
+```
+
+If the bank says no, for example a withdrawal bigger than the overdraft, it
+prints `Error: ...` and nothing is saved, so the file is never half changed.
+Use `--file other.json` before the command to keep a separate bank, and add
+`--help` after any command to see its options.
+
+Each command is its own small class in `cli.py`. A new command is a new
+class added to the list, and none of the others change.
+
+## Using the bank in code
 
 ```python
 from banking import Bank
@@ -157,6 +189,8 @@ for line in current.transactions:
 
 ```
 banking/
+├── cli.py               The terminal commands
+├── demo.py              The quick tour behind "python -m banking demo"
 ├── bank.py              Customers, accounts and transfers
 ├── customer.py          A customer's details
 ├── account_numbers.py   Where new account numbers come from
@@ -231,7 +265,7 @@ checks a withdrawal asks the same question of both and never checks the type.
 ## Tests
 
 ```bash
-pytest          # 326 tests
+pytest          # 378 tests
 ```
 
 ## Week plan

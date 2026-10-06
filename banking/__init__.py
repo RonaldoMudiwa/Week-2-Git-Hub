@@ -43,7 +43,7 @@ from .statements import Statement
 from .storage import BankRepository, InMemoryBankRepository, JSONBankRepository
 from .transaction import Transaction
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 __all__ = [
     # Bank
