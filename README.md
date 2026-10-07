@@ -8,9 +8,19 @@ week adds the five SOLID principles on top, and shows where each one is used.
 
 ## Status
 
-Day 6 of 7. Current and savings accounts, customers, safe transfers, monthly
+Finished. Current and savings accounts, customers, safe transfers, monthly
 interest and fees, saving to a file, statements and reports, and a command
-line interface.
+line interface. 400 tests with 100% line and branch coverage.
+
+## What it can do
+
+- Open current accounts with an overdraft and savings accounts with interest
+  and a monthly withdrawal limit
+- Move money between accounts, where a transfer fully happens or not at all
+- Pay interest and take fees at month end, using rules that can be swapped
+- Save everything to a JSON file and catch it if the file has been edited
+- Print monthly statements and a bank manager's report
+- Do all of the above from the terminal
 
 ## Getting started
 
@@ -265,8 +275,29 @@ checks a withdrawal asks the same question of both and never checks the type.
 ## Tests
 
 ```bash
-pytest          # 378 tests
+pytest                 # 400 tests
+pytest --cov           # the same, plus a coverage report
 ```
+
+Coverage settings live in `.coveragerc`. The run fails if coverage drops
+below 95%, so new code can't sneak in without tests. Right now every line
+and every branch is covered.
+
+The tests never touch real data. Saving tests use pytest's `tmp_path`, the
+terminal tests keep the bank in memory, and a `FakeClock` sets the date, so
+the results are the same whatever day they run.
+
+| File | What it checks |
+| --- | --- |
+| `test_account_rules.py` | The rules every account type must follow |
+| `test_current_account.py`, `test_savings_account.py` | Each account type's own rules |
+| `test_bank.py`, `test_customer.py`, `test_account_numbers.py` | Customers, opening accounts, transfers |
+| `test_policies.py`, `test_month_end.py` | Interest and fee rules, month end |
+| `test_storage.py` | Saving and loading, and catching edited files |
+| `test_statements.py`, `test_reports.py` | Statements and reports |
+| `test_cli.py` | Every terminal command, and that refused commands save nothing |
+| `test_edge_cases.py` | Damaged files, failed writes and small helpers |
+| `test_money.py`, `test_transaction.py` | Money amounts and history lines |
 
 ## Week plan
 
@@ -279,3 +310,5 @@ pytest          # 378 tests
 | 5 | Statements and reports |
 | 6 | Command line interface |
 | 7 | Final tests, coverage and README |
+
+All seven days are done.
